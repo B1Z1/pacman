@@ -1,3 +1,0 @@
-/Volumes/All/projects/cpp/pacman/cmake-build-debug/CMakeFiles/pacman.dir
-/Volumes/All/projects/cpp/pacman/cmake-build-debug/CMakeFiles/edit_cache.dir
-/Volumes/All/projects/cpp/pacman/cmake-build-debug/CMakeFiles/rebuild_cache.dir
