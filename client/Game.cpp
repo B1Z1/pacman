@@ -4,12 +4,12 @@
 #include "Pacman.hpp"
 #include "Map.hpp"
 
-Game::Game() : window(sf::VideoMode({800, 600}), "Pacman"), isRunning(true), deltaTime(0.0f) {
+Game::Game() : window(sf::VideoMode({ 19 * 32, 21 * 32}), "Pacman"), isRunning(true), deltaTime(0.0f) {
     window.setFramerateLimit(60);
 
     // Inicjalizacja mapy i Pacmana
     map = std::make_unique<Map>();
-    pacman = std::make_unique<Pacman>(400.0f, 300.0f); // Startowa pozycja Pacmana
+    pacman = std::make_unique<Pacman>(9 * 32.0f, 15 * 32.0f); // Startowa pozycja Pacmana
 }
 
 void Game::processEvents() {
