@@ -10,6 +10,12 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_executable(pacmanClient client/Game.cpp)
 
+target_sources(pacmanClient PRIVATE
+        client/Map.cpp
+        client/Pacman.cpp
+        client/Entity.cpp
+)
+
 target_link_libraries(pacmanClient sfml-graphics sfml-window sfml-system)
 
 add_executable(pacmanServer server/Server.cpp)
