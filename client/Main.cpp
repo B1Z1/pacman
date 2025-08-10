@@ -1,83 +1,175 @@
-#include <cstdlib>
-#include <ctime>
+#include <array>
+#include <chrono>
 #include <SFML/Graphics.hpp>
 
-#include "Game.hpp"
-#include "GameConfig.h"
+#include "Global.hpp"
+#include "TextRenderer/TextRenderer.hpp"
+#include "Pacman/Pacman.hpp"
+#include "Ghost/GhostManager.hpp"
+#include "MapConverter/MapConverter.hpp"
+#include "MapRenderer/MapRenderer.hpp"
 
-sf::FloatRect calculateView(const sf::Vector2f &windowSize, float pacRatio) {
-    sf::Vector2f viewSize = windowSize;
-    sf::FloatRect viewport({ 0.f, 0.f }, { 1.f, 1.f });
-    float ratio = viewSize.x / viewSize.y;
-
-    // too high
-    if (ratio < pacRatio) {
-        viewSize.y = viewSize.x / pacRatio;
-        float vp_h = viewSize.y / windowSize.y;
-        viewport.size.y = vp_h;
-        viewport.position.y = (1.f - vp_h) / 2.f;
-    }
-    // too wide
-    else if (ratio > pacRatio) {
-        viewSize.x = viewSize.y * pacRatio;
-        float vp_w = viewSize.x / windowSize.x;
-
-        viewport.position.x = vp_w;
-        viewport.size.x = (1.f - vp_w) / 2.f;
-    }
-    return viewport;
-}
-
-void resizeWindow(sf::RenderWindow &window, const sf::Event::Resized &resized) {
-    float width = resized.size.x;
-    float height = resized.size.y;
-
-    sf::View view = window.getView();
-
-    view.setViewport(calculateView({ width, height }, WIN_RATIO));
-    window.setView(view);
-}
-
+/**
+ * Główna funkcja gry Pac-Man
+ * Odpowiada za:
+ * - Inicjalizację okna gry i podstawowych zmiennych
+ * - Wczytanie i konwersję mapy
+ * - Główną pętlę gry obsługującą:
+ *   - Aktualizację stanu gry (ruch pacmana i duchów)
+ *   - Renderowanie grafiki
+ *   - Obsługę wejścia użytkownika
+ *   - Zarządzanie poziomami i stanem gry
+ * - Kontrolę czasu i synchronizację klatek
+ * @return Kod zakończenia programu
+ */
 int main() {
-    Game game;
+    bool game_won = 0;
 
-    srand(time(NULL));
 
-    auto viewWidth = 28 * TILE_SIZE;
-    auto viewHeight = 36 * TILE_SIZE;
-    auto windowWidth = viewWidth * 2;
-    auto windowHeight = viewHeight * 2;
+    unsigned lag = 0;
+
+    unsigned char level = 0;
+
+
+    std::chrono::time_point<std::chrono::steady_clock> previous_time;
+
+
+    std::array<std::string, MAP_HEIGHT> map_sketch = {
+        " ################### ",
+        " #........#........# ",
+        " #o##.###.#.###.##o# ",
+        " #.................# ",
+        " #.##.#.#####.#.##.# ",
+        " #....#...#...#....# ",
+        " ####.### # ###.#### ",
+        "    #.#   0   #.#    ",
+        "#####.# ##=## #.#####",
+        "     .  #123#  .     ",
+        "#####.# ##### #.#####",
+        "    #.#       #.#    ",
+        " ####.# ##### #.#### ",
+        " #........#........# ",
+        " #.##.###.#.###.##.# ",
+        " #o.#.....P.....#.o# ",
+        " ##.#.#.#####.#.#.## ",
+        " #....#...#...#....# ",
+        " #.######.#.######.# ",
+        " #.................# ",
+        " ################### "
+    };
+
+    std::array<std::array<Cell, MAP_HEIGHT>, MAP_WIDTH> map{};
+
+
+    std::array<Position, 4> ghost_positions;
+
+
+    sf::Event event;
 
     sf::RenderWindow window(
-        sf::VideoMode({ windowWidth, windowHeight }),
-        "Pacman"
-    );
+        sf::VideoMode(CELL_SIZE * MAP_WIDTH * SCREEN_RESIZE, (FONT_HEIGHT + CELL_SIZE * MAP_HEIGHT) * SCREEN_RESIZE),
+        "Pac-Man", sf::Style::Close);
+    window.setView(sf::View(sf::FloatRect(0, 0, CELL_SIZE * MAP_WIDTH, FONT_HEIGHT + CELL_SIZE * MAP_HEIGHT)));
 
-    window.setFramerateLimit(60);
-    window.setView(sf::View({ 0, 0 }, { static_cast<float>(viewWidth), static_cast<float>(viewHeight) }));
+    GhostManager ghost_manager;
 
-    sf::Clock clock;
-    sf::Time elapsed;
+    Pacman pacman;
 
-    while (window.isOpen()) {
-        while (const std::optional event = window.pollEvent()) {
-            if (event->is<sf::Event::Closed>()) {
-                window.close();
-            }
 
-            if (const auto *resized = event->getIf<sf::Event::Resized>()) {
-                resizeWindow(window, *resized);
-            }
+    srand(static_cast<unsigned>(time(0)));
 
-            if (const auto *keyPressed = event->getIf<sf::Event::KeyPressed>()) {
-                if (keyPressed->scancode == sf::Keyboard::Scancode::Escape) {
-                    window.close();
+    map = convert_map(map_sketch, ghost_positions, pacman);
+
+    ghost_manager.reset(level, ghost_positions);
+
+
+    previous_time = std::chrono::steady_clock::now();
+
+    while (1 == window.isOpen()) {
+        unsigned delta_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - previous_time).count();
+
+        lag += delta_time;
+
+        previous_time += std::chrono::microseconds(delta_time);
+
+
+        while (FRAME_DURATION <= lag) {
+            lag -= FRAME_DURATION;
+
+            while (1 == window.pollEvent(event)) {
+                switch (event.type) {
+                    case sf::Event::Closed: {
+                        window.close();
+                    }
                 }
             }
+
+            if (0 == game_won && 0 == pacman.get_dead()) {
+                game_won = 1;
+
+                pacman.update(level, map);
+
+                ghost_manager.update(level, map, pacman);
+
+
+                for (const std::array<Cell, MAP_HEIGHT> &column: map) {
+                    for (const Cell &cell: column) {
+                        if (Cell::Pellet == cell) {
+                            game_won = 0;
+
+                            break;
+                        }
+                    }
+
+                    if (0 == game_won) {
+                        break;
+                    }
+                }
+
+                if (1 == game_won) {
+                    pacman.set_animation_timer(0);
+                }
+            } else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Return)) {
+                game_won = 0;
+
+                if (1 == pacman.get_dead()) {
+                    level = 0;
+                } else {
+                    level++;
+                }
+
+                map = convert_map(map_sketch, ghost_positions, pacman);
+
+                ghost_manager.reset(level, ghost_positions);
+
+                pacman.reset();
+            }
+
+
+            if (FRAME_DURATION > lag) {
+                window.clear();
+
+                if (0 == game_won && 0 == pacman.get_dead()) {
+                    render_map(map, window);
+
+                    ghost_manager.draw(GHOST_FLASH_START >= pacman.get_energizer_timer(), window);
+
+                    render_text(0, 0, CELL_SIZE * MAP_HEIGHT, "Level: " + std::to_string(1 + level), window);
+                }
+
+                pacman.draw(game_won, window);
+
+                if (1 == pacman.get_animation_over()) {
+                    if (1 == game_won) {
+                        render_text(1, 0, 0, "Next level!", window);
+                    } else {
+                        render_text(1, 0, 0, "Game over", window);
+                    }
+                }
+
+                window.display();
+            }
         }
-
-        elapsed = clock.restart();
     }
-
-    return 0;
 }
