@@ -8,12 +8,11 @@ FETCHCONTENT_MAKEAVAILABLE(SFML)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(pacmanClient client/Game.cpp)
+add_executable(pacmanClient client/Main.cpp)
 
 target_sources(pacmanClient PRIVATE
-        client/Map.cpp
-        client/Pacman.cpp
-        client/Entity.cpp
+        client/GameConfig.h
+        client/Game.cpp
 )
 
 target_link_libraries(pacmanClient sfml-graphics sfml-window sfml-system)
